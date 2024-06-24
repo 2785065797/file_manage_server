@@ -25,18 +25,19 @@ int find_url(MYSQL* conn,const char* filename,const char* md5,char* url){
                 return -1;
         }
         MYSQL_ROW row;
-        while ((row = mysql_fetch_row(result)) != NULL) {
-                url=row[0];
+       	if ((row = mysql_fetch_row(result)) != NULL) {
+                strncpy(url,row[0],sizeof(url)-1);
+		url[strlen(url)]='\0';
         }
 	mysql_free_result(result);
 	mysql_close(conn);
 	return 1;
 }
-void del_fdfs_file(const char *url){
+void del_fdfs_file(const char *url,int *flag){
 	int fd[2];
 	int  ret =pipe(fd);
 	if(ret==-1){
-		perror("pipe error");
+		*flag=-1;
                 exit(0);
 	}
 	pid_t pid=fork();
@@ -44,10 +45,12 @@ void del_fdfs_file(const char *url){
 		dup2(fd[1],STDOUT_FILENO);
 		close(fd[0]);
 		execlp("fdfs_delete_file","fdfs_delete_file","/etc/fdfs/client.conf",url,NULL);
-		perror("execlp error");
+		*flag=-1;
 	}
 	else{
 		close(fd[1]);
+		char buf[1024];
+		read(fd[0],buf,sizeof(buf));
 		//此处可以判断是否删除成功
 		wait(NULL);
 	}
@@ -60,14 +63,13 @@ int del_redis(const char* md5){
 		}
 		return -1;
 	}
-	char* cmd;
-	redisFormatCommand(&cmd,"DEL %s",md5);
+	char cmd[200];
+	snprintf(cmd,sizeof(cmd),"DEL %s",md5);
 	if(cmd==NULL){
 		redisFree(c);
 		return -1;
 	}
 	redisReply* reply=(redisReply*)redisCommand(c,cmd);
-	free(cmd);
 	if(reply==NULL||reply->type==REDIS_REPLY_ERROR){
 		if(reply){
 			freeReplyObject(reply);
@@ -173,20 +175,23 @@ int del(MYSQL* conn,const char* username,const char* md5,const char* filename){
 	}
 	my_ulonglong affected_rows=mysql_affected_rows(conn);
 	if(affected_rows>0){
-		int flag;
+		int flag,ret;
 		char url[512];
 		std::thread my_thread(thread_runner,md5,&flag);
-		if(del_file_info(conn,username,md5,filename)==-1){
-			return -1;
-		}
 		if(find_url(conn,filename,md5,url)==-1){
 			return -1;
 		}
-		del_fdfs_file(url);
+		if(del_count(conn,username)==-1){
+			return -1;
+		}
+		if(del_file_info(conn,username,md5,filename)==-1){
+			return -1;
+		}
 		if(del_shared(conn,username,md5,filename)==-1){
 			return -1;
 		}
-		if(del_count(conn,username)==-1){
+		del_fdfs_file(url,&ret);
+		if(ret==-1){
 			return -1;
 		}
 		my_thread.join();
