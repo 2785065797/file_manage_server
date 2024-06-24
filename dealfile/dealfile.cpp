@@ -10,27 +10,38 @@
 #include<string.h>
 #include <hiredis/hiredis.h>
 #include<thread>
+#include <log4cplus/logger.h>
+#include <log4cplus/initializer.h>
+#include <log4cplus/fileappender.h>
+#include <log4cplus/loggingmacros.h>
+#include <log4cplus/helpers/property.h>
+#include <iomanip>
+#include<memory>
+using namespace std;
+using namespace log4cplus;
+
+Logger dealfile_logger;
 
 int find_url(MYSQL* conn,const char* filename,const char* md5,char* url){
 	char query[BUFSIZ];
-        sprintf(query,"SELECT url FROM file_info WHERE filename='%s'and md5='%s';",filename,md5);
-        if(mysql_query(conn,query)){
-                mysql_close(conn);
-                return -1;
-        }
-        // 如果凭据正确，返回true，否则返回false
-        MYSQL_RES *result=mysql_store_result(conn);
-        if(result==NULL){
-                mysql_close(conn);
-                return -1;
-        }
-        MYSQL_ROW row;
-       	if ((row = mysql_fetch_row(result)) != NULL) {
-                strncpy(url,row[0],sizeof(url)-1);
+	sprintf(query,"SELECT url FROM file_info WHERE filename='%s'and md5='%s';",filename,md5);
+	if(mysql_query(conn,query)){
+		mysql_close(conn);
+		return -1;
+	}
+	// 如果凭据正确，返回true，否则返回false
+	MYSQL_RES *result=mysql_store_result(conn);
+	if(result==NULL){
+		mysql_close(conn);
+		return -1;
+	}
+	MYSQL_ROW row;
+	if ((row = mysql_fetch_row(result)) != NULL) {
+		strcpy(url,row[0]);
 		url[strlen(url)]='\0';
-        }
+	}
+	LOG4CPLUS_DEBUG(dealfile_logger, "find_url #url=" <<url );
 	mysql_free_result(result);
-	mysql_close(conn);
 	return 1;
 }
 void del_fdfs_file(const char *url,int *flag){
@@ -38,7 +49,7 @@ void del_fdfs_file(const char *url,int *flag){
 	int  ret =pipe(fd);
 	if(ret==-1){
 		*flag=-1;
-                exit(0);
+		exit(0);
 	}
 	pid_t pid=fork();
 	if(pid==0){
@@ -51,6 +62,7 @@ void del_fdfs_file(const char *url,int *flag){
 		close(fd[1]);
 		char buf[1024];
 		read(fd[0],buf,sizeof(buf));
+		LOG4CPLUS_DEBUG(dealfile_logger,"del_fdfs_file #stdin="<<buf);
 		//此处可以判断是否删除成功
 		wait(NULL);
 	}
@@ -83,6 +95,9 @@ int del_redis(const char* md5){
 	//} else {  
 	//	printf("Key does not exist or no keys were deleted\n");  
 	//}  	
+	if (reply->integer > 0) {  
+		LOG4CPLUS_DEBUG(dealfile_logger,"del_redis # successful deleted redis data");
+	}
 	freeReplyObject(reply);
 	redisFree(c);	
 	return 1;
@@ -93,10 +108,8 @@ void thread_runner(const char* md5,int* flag){
 }	
 
 int del_file_info(MYSQL* conn,const char* username,const char* md5,const char* filename){
-	if(mysql_query(conn,"START TRANSACTION;")){
-		return -1;
-	}
 	char query[BUFSIZ];
+	LOG4CPLUS_DEBUG(dealfile_logger,"del_file_info # plan to delete file_info data");
 	snprintf(query,sizeof(query),"update file_info set count=count-1 where filename='%s' and md5='%s';",filename,md5);
 	if(mysql_query(conn,query)){
 		mysql_query(conn,"ROLLBACK;");
@@ -112,20 +125,22 @@ int del_file_info(MYSQL* conn,const char* username,const char* md5,const char* f
 		mysql_query(conn,"ROLLBACK;");
 		return -1;
 	}
-	if(mysql_query(conn,"COMMIT;")){
-		return -1;
-	}
+	LOG4CPLUS_DEBUG(dealfile_logger,"del_file_info # successful deleted file_info data");
 	return 1;
 }
 int del_count(MYSQL* conn,const char* username){
 	char query[BUFSIZ];
-	snprintf(query,sizeof(query),"update user_file_count set count=count-1 where user='%s'",username);
+	LOG4CPLUS_DEBUG(dealfile_logger,"del_count # start plan sql user="<<username);
+	sprintf(query,"update user_file_count set count=count-1 where user='%s'",username);
 	if(mysql_query(conn,query)){
+		LOG4CPLUS_DEBUG(dealfile_logger,"MySQL query error: "<< mysql_error(conn)); 
 		return -1;
 	}
+	LOG4CPLUS_DEBUG(dealfile_logger,"del_count # start plan to delete user_count");
 	my_ulonglong affected_rows=mysql_affected_rows(conn);
 	if(affected_rows>0){
 		return 1;
+		LOG4CPLUS_DEBUG(dealfile_logger,"del_count # successful deleted user_count");
 	}
 	else{
 		return -1;
@@ -133,6 +148,7 @@ int del_count(MYSQL* conn,const char* username){
 }
 int del_shared(MYSQL* conn,const char* username,const char* md5,const char* filename){
 	char query[BUFSIZ];
+	LOG4CPLUS_DEBUG(dealfile_logger,"del_shared # start plan to delete shared data");
 	snprintf(query,sizeof(query),"select * from share_file_list where user='%s' and  md5='%s' and filename='%s'",username,md5,filename);
 	if(mysql_query(conn,query)){
 		return -1;
@@ -141,6 +157,7 @@ int del_shared(MYSQL* conn,const char* username,const char* md5,const char* file
 	if(result==NULL){
 		return -1;
 	}
+	LOG4CPLUS_DEBUG(dealfile_logger,"del_shared # successful find shared data");
 	if(mysql_num_rows(result)>0){
 		mysql_free_result(result);
 		snprintf(query,sizeof(query),"delete from share_file_list where user='%s' and md5='%s' and filename='%s'",username,md5,filename);
@@ -149,6 +166,7 @@ int del_shared(MYSQL* conn,const char* username,const char* md5,const char* file
 		}
 		my_ulonglong affected_rows=mysql_affected_rows(conn);
 		if(affected_rows>0){
+			LOG4CPLUS_DEBUG(dealfile_logger,"del_shared # successful deleted shared data");
 			return 1;
 		}
 		else{
@@ -165,42 +183,59 @@ int del_shared(MYSQL* conn,const char* username,const char* md5,const char* file
 		return -1;
 	}
 }
-
-
-int del(MYSQL* conn,const char* username,const char* md5,const char* filename){
+int del_user_file(MYSQL* conn,const char* username,const char* md5,const char* filename){
 	char query[BUFSIZ];
 	snprintf(query,sizeof(query),"delete from user_file_list where user='%s' and md5='%s' and filename='%s'",username,md5,filename);
 	if(mysql_query(conn,query)){
 		return -1;
 	}
+	LOG4CPLUS_DEBUG(dealfile_logger,"del_user_file #successful deleted user_file");
 	my_ulonglong affected_rows=mysql_affected_rows(conn);
 	if(affected_rows>0){
-		int flag,ret;
-		char url[512];
-		std::thread my_thread(thread_runner,md5,&flag);
-		if(find_url(conn,filename,md5,url)==-1){
-			return -1;
-		}
-		if(del_count(conn,username)==-1){
-			return -1;
-		}
-		if(del_file_info(conn,username,md5,filename)==-1){
-			return -1;
-		}
-		if(del_shared(conn,username,md5,filename)==-1){
-			return -1;
-		}
-		del_fdfs_file(url,&ret);
-		if(ret==-1){
-			return -1;
-		}
-		my_thread.join();
-		if(flag==-1) return -1;
+		return 1;
 	}
-	else{
+	else return -1;
+}
+
+int del(MYSQL* conn,const char* username,const char* md5,const char* filename){
+	int flag,ret,key=1;
+	char url[512];
+	std::thread my_thread(thread_runner,md5,&flag);
+	if(mysql_query(conn,"START TRANSACTION;")){
+                key=-1;
+        }
+	if(del_user_file(conn,username,md5,filename)==-1){
+		key=-1;
+	}
+	if(find_url(conn,filename,md5,url)==-1){
+		key=-1;
+	}
+	if(del_count(conn,username)==-1){
+		key=-1;
+	}
+	if(del_file_info(conn,username,md5,filename)==-1){
+		key=-1;
+	}
+	if(del_shared(conn,username,md5,filename)==-1){
+		key=-1;
+	}
+	del_fdfs_file(url,&ret);
+	if(ret==-1){
+		key=-1;
+	}
+	if(key==-1){
+		mysql_query(conn,"ROLLBACK;");
 		return -1;
 	}
-	return 1;
+	if(mysql_query(conn,"COMMIT;")){
+                return -1;
+        }
+
+	my_thread.join();
+	if(flag==-1){
+		return -1;
+	}
+	return key;
 }
 
 int isShared(MYSQL* conn,const char* md5,const char* filename){
@@ -327,6 +362,25 @@ bool validateToken(const std::string& token) {
 }
 
 int main(){
+	//日志初始化
+	log4cplus::Initializer initializer;
+
+	/* step 1: Instantiate an appender object */
+	SharedAppenderPtr  _append(new RollingFileAppender("dealfile.log", 300 * 1024, 5));
+	_append->setName("dealfile_appender");
+
+	/* step 2: Instantiate a layout object */
+	/* step 3: Attach the layout object to the appender */
+	std::string pattern = "%D{%m/%d/%y %H:%M:%S,%q} [%-5t] [%-5p] - %m%n";
+	_append->setLayout(std::unique_ptr<Layout>(new PatternLayout(pattern)));
+
+	/* step 4: Instantiate a logger object */
+	dealfile_logger = Logger::getInstance("dealfile_logger");
+
+	/* step 5: Attach the appender object to the logger  */
+	dealfile_logger.addAppender(_append);
+
+	//开始接听
 	while(FCGI_Accept()>=0){
 		char* contentLengthStr=getenv("CONTENT_LENGTH");
 		char* cmd=getenv("QUERY_STRING");
