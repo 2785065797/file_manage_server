@@ -26,13 +26,11 @@ int find_url(MYSQL* conn,const char* filename,const char* md5,char* url){
 	char query[BUFSIZ];
 	sprintf(query,"SELECT url FROM file_info WHERE filename='%s'and md5='%s';",filename,md5);
 	if(mysql_query(conn,query)){
-		mysql_close(conn);
 		return -1;
 	}
 	// 如果凭据正确，返回true，否则返回false
 	MYSQL_RES *result=mysql_store_result(conn);
 	if(result==NULL){
-		mysql_close(conn);
 		return -1;
 	}
 	MYSQL_ROW row;
@@ -201,9 +199,6 @@ int del(MYSQL* conn,const char* username,const char* md5,const char* filename){
 	int flag,ret,key=1;
 	char url[512];
 	std::thread my_thread(thread_runner,md5,&flag);
-	if(mysql_query(conn,"START TRANSACTION;")){
-                key=-1;
-        }
 	if(del_user_file(conn,username,md5,filename)==-1){
 		key=-1;
 	}
@@ -227,9 +222,6 @@ int del(MYSQL* conn,const char* username,const char* md5,const char* filename){
 		mysql_query(conn,"ROLLBACK;");
 		return -1;
 	}
-	if(mysql_query(conn,"COMMIT;")){
-                return -1;
-        }
 
 	my_thread.join();
 	if(flag==-1){
@@ -316,12 +308,16 @@ int authenticateUser(const char* username,const char* md5,const char* filename,c
 		mysql_close(conn);
 		return -1;
 	}
+	if(mysql_query(conn,"START TRANSACTION;")){
+                return -1;
+        }
 	if(strcmp(cmd,"cmd=pv")==0){	
 		int flag=pv(conn,username,md5,filename);
 		if(flag==1){
 			printf("{\"code\":\"016\"}");
 		}
 		else{
+			mysql_query(conn,"ROLLBACK;");
 			printf("{\"code\":\"017\"}");
 		}
 	}
@@ -335,6 +331,7 @@ int authenticateUser(const char* username,const char* md5,const char* filename,c
 			printf("{\"code\":\"010\"}");
 		}
 		else{
+			mysql_query(conn,"ROLLBACK;");
 			printf("{\"code\":\"011\"}");
 		}
 	}
@@ -343,6 +340,7 @@ int authenticateUser(const char* username,const char* md5,const char* filename,c
 			printf("{\"code\":\"013\"}");
 		}
 		else{
+			mysql_query(conn,"ROLLBACK;");
 			printf("{\"code\":\"014\"}");
 		}
 	}
@@ -350,6 +348,9 @@ int authenticateUser(const char* username,const char* md5,const char* filename,c
 		mysql_close(conn);
 		return -1;
 	}
+	if(mysql_query(conn,"COMMIT;")){
+                return -1;
+        }
 	mysql_close(conn);
 	return 1;
 }
