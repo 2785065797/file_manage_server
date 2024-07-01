@@ -62,7 +62,7 @@ int authenticateUser2(char* cmd,int start,int count) {
 	char *index=strtok(cmd,"=");
 	index=strtok(NULL,"=");
 	char query[BUFSIZ];
-	sprintf(query,"SELECT user_file_list.user,user_file_list.md5,user_file_list.createtime,user_file_list.filename,user_file_list.shared_status,user_file_list.pv,file_info.url,file_info.size,file_info.type FROM user_file_list JOIN file_info ON user_file_list.md5=file_info.md5 and user_file_list.filename=file_info.filename WHERE user_file_list.shared_status=1 order by user_file_list.pv LIMIT %d OFFSET %d;",count,start);	
+	sprintf(query,"SELECT share_file_list.user,share_file_list.md5,share_file_list.createtime,share_file_list.filename,share_file_list.pv,file_info.url,file_info.size,file_info.type FROM share_file_list JOIN file_info ON share_file_list.md5=file_info.md5 and share_file_list.filename=file_info.filename order by share_file_list.pv desc LIMIT %d OFFSET %d;",count,start);	
 	if(mysql_query(conn,query)){
 		mysql_close(conn);
 		return -1;
@@ -90,11 +90,11 @@ int authenticateUser2(char* cmd,int start,int count) {
 				file["md5"]=row[1];
 				file["time"]=row[2];
 				file["filename"]=row[3];
-				file["share_status"]=stoi(row[4]);
-				file["pv"]=stoi(row[5]);
-				file["url"]=row[6];
-				file["size"]=stol(row[7]);
-				file["type"]=row[8];
+				file["share_status"]=1;
+				file["pv"]=stoi(row[4]);
+				file["url"]=row[5];
+				file["size"]=stol(row[6]);
+				file["type"]=row[7];
 				filesArray.append(file);
 			}
 		}
