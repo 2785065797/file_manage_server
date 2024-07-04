@@ -109,6 +109,20 @@ int cancel_shared(MYSQL* conn,const char* username,const char* md5,const char* f
                 return -1;
         }
 }
+int pv(MYSQL* conn,const char* username,const char* md5,const char* filename){
+        char query[BUFSIZ];
+        snprintf(query,sizeof(query),"update share_file_list set pv=pv+1 where user='%s' and md5='%s' and filename='%s'",username,md5,filename);
+        if(mysql_query(conn,query)){
+                return -1;
+        }
+        my_ulonglong affected_rows=mysql_affected_rows(conn);
+        if(affected_rows>0){
+                return 1;
+        }
+        else{
+                return -1;
+        }
+}
 
 int authenticateUser(const char* username,const char* md5,const char* filename,const char* cmd){
 	MYSQL *conn=mysql_init(NULL);
@@ -149,6 +163,15 @@ int authenticateUser(const char* username,const char* md5,const char* filename,c
 		}
 		else{
 			printf("{\"code\":\"022\"}");
+		}
+	}
+	else if(strcmp(cmd,"cmd=pv")==0){
+		int flag=pv(conn,username,md5,filename);
+		if(flag==1){
+			printf("{\"code\":\"016\"}");
+		}
+		else{
+			printf("{\"code\":\"017\"}");
 		}
 	}
 	else{
