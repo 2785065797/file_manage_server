@@ -13,7 +13,7 @@ using namespace std;
 #include<regex.h>
 // 假设您有一个数据库或者用户管理类来验证用户
 
-int authenticateUser1(long *num) {
+int authenticateUser1(int search,long *num,char *cmd) {
 	MYSQL *conn=mysql_init(NULL);
 	if(conn==NULL){
 		return -1;
@@ -24,7 +24,14 @@ int authenticateUser1(long *num) {
 	}
 	// 这里应该有代码来检查用户的凭据，例如查询数据库
 	char query[BUFSIZ];
-	sprintf(query,"SELECT count(*) FROM share_file_list");
+	if(search==1){
+		char *index=strtok(cmd,"=");
+		index=strtok(NULL,"");
+		sprintf(query,"SELECT count(*) FROM share_file_list WHERE filename LIKE '%%%s%%';",index);
+	}
+	else{
+		sprintf(query,"SELECT count(*) FROM share_file_list");
+	}
 	if(mysql_query(conn,query)){
 		mysql_close(conn);
 		return -1;
@@ -61,8 +68,13 @@ int authenticateUser2(char* cmd,int start,int count) {
 	}
 	char *index=strtok(cmd,"=");
 	index=strtok(NULL,"=");
+	index=strtok(NULL,"");
 	char query[BUFSIZ];
-	sprintf(query,"SELECT share_file_list.user,share_file_list.md5,share_file_list.createtime,share_file_list.filename,share_file_list.pv,file_info.url,file_info.size,file_info.type FROM share_file_list JOIN file_info ON share_file_list.md5=file_info.md5 and share_file_list.filename=file_info.filename order by share_file_list.pv desc LIMIT %d OFFSET %d;",count,start);	
+	if(index!=NULL){
+		sprintf(query,"SELECT share_file_list.user,share_file_list.md5,share_file_list.createtime,share_file_list.filename,share_file_list.pv,file_info.url,file_info.size,file_info.type FROM share_file_list JOIN file_info ON share_file_list.md5=file_info.md5 and share_file_list.filename=file_info.filename where share_file_list.filename Like'%%%s%%' order by share_file_list.pv desc LIMIT %d OFFSET %d;",index,count,start);
+	}else{
+		sprintf(query,"SELECT share_file_list.user,share_file_list.md5,share_file_list.createtime,share_file_list.filename,share_file_list.pv,file_info.url,file_info.size,file_info.type FROM share_file_list JOIN file_info ON share_file_list.md5=file_info.md5 and share_file_list.filename=file_info.filename order by share_file_list.pv desc LIMIT %d OFFSET %d;",count,start);	
+	}
 	if(mysql_query(conn,query)){
 		mysql_close(conn);
 		return -1;
@@ -111,7 +123,13 @@ int authenticateUser2(char* cmd,int start,int count) {
 	mysql_close(conn);
 	return 0;
 }
-
+int strcmd(const char *cmd){
+	char buf[1024];
+	strcpy(buf,cmd);
+	char *index=strtok(buf,"=");
+	if(strcmp(index,"cnt")==0) return 1;
+	else return 0;
+}
 int main() {
 	while (FCGI_Accept() >= 0) {
 		// 1. 根据content-length得到post数据块的长度
@@ -136,22 +154,27 @@ int main() {
 		content[contentLength] = '\0';
 		long num;
 		int flag;
-		if (strcmp(cmd,"cmd=count")==0) {
-
-			flag=authenticateUser1(&num);
+		int search=strcmd(cmd);
+		if(search==1){
+			flag=authenticateUser1(search,&num,cmd);
 		}
 		else{
-			Json::Value root;
-			Json::Reader reader;
-			if (!reader.parse(content, root)) {
-				printf("Content-type: text/html\r\n\r\n");
-				printf( "Error: Invalid JSON.\r\n");
-				free(content);
-				return -1;
+			if (strcmp(cmd,"cmd=count")==0) {
+				flag=authenticateUser1(search,&num,cmd);
 			}
-			const int start = root["start"].asInt();
-			const int count = root["count"].asInt();
-			flag=authenticateUser2(cmd,start,count);
+			else{
+				Json::Value root;
+				Json::Reader reader;
+				if (!reader.parse(content, root)) {
+					printf("Content-type: text/html\r\n\r\n");
+					printf( "Error: Invalid JSON.\r\n");
+					free(content);
+					return -1;
+				}
+				const int start = root["start"].asInt();
+				const int count = root["count"].asInt();
+				flag=authenticateUser2(cmd,start,count);
+			}
 		}
 		if(flag==1){
 			printf( "Content-type: text/plain\r\n\r\n");

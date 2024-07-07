@@ -13,7 +13,7 @@ using namespace std;
 #include<regex.h>
 // 假设您有一个数据库或者用户管理类来验证用户
 
-int authenticateUser1(const char* username,int *num) {
+int authenticateUser1(int search,const char* username,int *num,char *cmd) {
 	MYSQL *conn=mysql_init(NULL);
 	if(conn==NULL){
 		return -1;
@@ -24,7 +24,14 @@ int authenticateUser1(const char* username,int *num) {
 	}
 	// 这里应该有代码来检查用户的凭据，例如查询数据库
 	char query[BUFSIZ];
-	sprintf(query,"SELECT count FROM user_file_count WHERE user = '%s';",username);
+	if(search==1){
+		char *index=strtok(cmd,"=");
+		index=strtok(NULL,"");
+		sprintf(query,"SELECT count(*) FROM user_file_list WHERE user = '%s'and filename LIKE '%%%s%%';",username,index);
+	}
+	else{
+		sprintf(query,"SELECT count FROM user_file_count WHERE user = '%s';",username);
+	}
 	if(mysql_query(conn,query)){
 		mysql_close(conn);
 		return -1;
@@ -45,6 +52,13 @@ int authenticateUser1(const char* username,int *num) {
 	mysql_close(conn);
 	return 1;
 }
+int strcmd(const char *cmd){
+	char buf[1024];
+	strcpy(buf,cmd);
+	char *index=strtok(buf,"=");
+	if(strcmp(index,"cnt")==0) return 1;
+	else return 0;
+}
 
 int authenticateUser2(char* cmd,const char* username,int start,int count) {
 	MYSQL *conn=mysql_init(NULL);
@@ -57,12 +71,21 @@ int authenticateUser2(char* cmd,const char* username,int start,int count) {
 	}
 	char *index=strtok(cmd,"=");
 	index=strtok(NULL,"=");
+	char *str=strtok(NULL,"");
 	char query[BUFSIZ];
-
-	if(strcmp(index,"normal")==0){
-		sprintf(query,"SELECT user_file_list.user,user_file_list.md5,user_file_list.createtime,user_file_list.filename,user_file_list.shared_status,user_file_list.pv,file_info.url,file_info.size,file_info.type FROM user_file_list JOIN file_info ON user_file_list.md5=file_info.md5 and user_file_list.filename=file_info.filename WHERE user_file_list.user='%s' order by user_file_list.pv LIMIT %d OFFSET %d;",username,count,start);	
-	}else{
-		sprintf(query,"SELECT user_file_list.user,user_file_list.md5,user_file_list.createtime,user_file_list.filename,user_file_list.shared_status,user_file_list.pv,file_info.url,file_info.size,file_info.type FROM user_file_list JOIN file_info ON user_file_list.md5=file_info.md5 and user_file_list.filename=file_info.filename WHERE user_file_list.user='%s' order by user_file_list.pv %s LIMIT %d OFFSET %d;",username,index+2,count,start);
+	if(str==NULL){
+		if(strcmp(index,"normal")==0){
+			sprintf(query,"SELECT user_file_list.user,user_file_list.md5,user_file_list.createtime,user_file_list.filename,user_file_list.shared_status,user_file_list.pv,file_info.url,file_info.size,file_info.type FROM user_file_list JOIN file_info ON user_file_list.md5=file_info.md5 and user_file_list.filename=file_info.filename WHERE user_file_list.user='%s' order by user_file_list.pv LIMIT %d OFFSET %d;",username,count,start);	
+		}else{
+			sprintf(query,"SELECT user_file_list.user,user_file_list.md5,user_file_list.createtime,user_file_list.filename,user_file_list.shared_status,user_file_list.pv,file_info.url,file_info.size,file_info.type FROM user_file_list JOIN file_info ON user_file_list.md5=file_info.md5 and user_file_list.filename=file_info.filename WHERE user_file_list.user='%s' and user_file_list.filename Like'%%%s%%' order by user_file_list.pv %s LIMIT %d OFFSET %d;",username,str,index+2,count,start);
+		}
+	}
+	else{
+		if(strcmp(index,"normal")==0){
+			sprintf(query,"SELECT user_file_list.user,user_file_list.md5,user_file_list.createtime,user_file_list.filename,user_file_list.shared_status,user_file_list.pv,file_info.url,file_info.size,file_info.type FROM user_file_list JOIN file_info ON user_file_list.md5=file_info.md5 and user_file_list.filename=file_info.filename WHERE user_file_list.user='%s' and user_file_list.filename Like'%%%s%%' order by user_file_list.pv LIMIT %d OFFSET %d;",username,str,count,start);
+		}else{
+			sprintf(query,"SELECT user_file_list.user,user_file_list.md5,user_file_list.createtime,user_file_list.filename,user_file_list.shared_status,user_file_list.pv,file_info.url,file_info.size,file_info.type FROM user_file_list JOIN file_info ON user_file_list.md5=file_info.md5 and user_file_list.filename=file_info.filename WHERE user_file_list.user='%s' order by user_file_list.pv %s LIMIT %d OFFSET %d;",username,index+2,count,start);
+		}
 	}
 
 	if(mysql_query(conn,query)){
@@ -89,12 +112,6 @@ int authenticateUser2(char* cmd,const char* username,int start,int count) {
 			if(row!=NULL){
 				// 发送一个包含所有键值对的JSON对象  
 				file["user"]=row[0];
-bool validateToken(const std::string& token) {
-        // 在这里实现你的 token 验证逻辑  
-        // 例如，从数据库或缓存中查找 token 是否有效，并与 userId 匹配  
-        // ...  
-        return true; // 示例：总是返回 true，实际实现中需要替换  
-}
 				file["md5"]=row[1];
 				file["time"]=row[2];
 				file["filename"]=row[3];
@@ -167,14 +184,19 @@ int main() {
 		}
 		int num;
 		int flag;
-		if (strcmp(cmd,"cmd=count")==0) {
-
-			flag=authenticateUser1(username,&num);
+		int search=strcmd(cmd);
+		if(search==1){
+			flag=authenticateUser1(search,username,&num,cmd);
 		}
 		else{
-			const int start = root["start"].asInt();
-			const int count = root["count"].asInt();
-			flag=authenticateUser2(cmd,username,start,count);
+			if (strcmp(cmd,"cmd=count")==0) {
+				flag=authenticateUser1(search,username,&num,cmd);
+			}
+			else{
+				const int start = root["start"].asInt();
+				const int count = root["count"].asInt();
+				flag=authenticateUser2(cmd,username,start,count);
+			}
 		}
 		if(flag==1){
 			printf( "Content-type: application/json\r\n\r\n");
