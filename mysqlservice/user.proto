@@ -1,0 +1,10 @@
+// user.proto
+syntax = "proto3";
+
+package fixbug;
+
+message User {
+  bytes name = 1;
+  bytes pwd = 2;
+}
+
