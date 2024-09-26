@@ -21,7 +21,7 @@ int authenticateUser(const char* username, const char* nickname, const char* pas
 	if (conn == NULL) {
 		return -1; // 分配内存失败
 	}
-	if (mysql_real_connect(conn, "192.168.182.26", "virtual", "1", "cloud_disk", 0, NULL, 0) == NULL) {
+	if (mysql_real_connect(conn, " 192.168.250.26", "virtual", "1", "cloud_disk", 0, NULL, 0) == NULL) {
 		mysql_close(conn);
 		return -1; // 连接数据库失败
 	}

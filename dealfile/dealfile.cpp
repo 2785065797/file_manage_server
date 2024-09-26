@@ -17,6 +17,7 @@
 #include <log4cplus/helpers/property.h>
 #include <iomanip>
 #include<memory>
+#include<token.h>
 using namespace std;
 using namespace log4cplus;
 
@@ -304,7 +305,7 @@ int authenticateUser(const char* username,const char* md5,const char* filename,c
 	if(conn==NULL){
 		return -1;
 	}
-	if(mysql_real_connect(conn,"192.168.182.26","virtual","1","cloud_disk",0,NULL,0)==NULL){
+	if(mysql_real_connect(conn," 192.168.250.26","virtual","1","cloud_disk",0,NULL,0)==NULL){
 		mysql_close(conn);
 		return -1;
 	}
@@ -355,11 +356,9 @@ int authenticateUser(const char* username,const char* md5,const char* filename,c
 	return 1;
 }
 
-bool validateToken(const std::string& token) {
-	// 在这里实现你的 token 验证逻辑  
-	// 例如，从数据库或缓存中查找 token 是否有效，并与 userId 匹配  
-	// ...  
-	return true; // 示例：总是返回 true，实际实现中需要替换  
+bool validateToken(const std::string& token,string& username) {
+	//token从redis中取出
+	return get_redis(string& username,string& token); 
 }
 
 int main(){
@@ -411,7 +410,7 @@ int main(){
 		const char* token=root["token"].asCString();
 		const char* md5=root["md5"].asCString();
 		const char* filename=root["filename"].asCString();
-		if(!validateToken(token)){
+		if(!validateToken(token,username)){
 			printf( "Content-type: application/json\r\n\r\n");
 			printf("{\"code\":\"111\"}");
 			free(content);

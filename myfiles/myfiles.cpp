@@ -1,8 +1,6 @@
 #include<iostream>
-using namespace std;
 #include <fcntl.h>
 #include <unistd.h>
-
 #include <string.h>
 #include "fcgi_stdio.h"
 #include"fcgi_config.h"
@@ -10,18 +8,29 @@ using namespace std;
 #include<fastcgi.h>
 #include <json.h>
 #include<string>
+#include<token.h>
 #include<regex.h>
-// 假设您有一个数据库或者用户管理类来验证用户
+#include <log4cplus/logger.h>
+#include <log4cplus/initializer.h>
+#include <log4cplus/fileappender.h>
+#include <log4cplus/loggingmacros.h>
+#include <log4cplus/helpers/property.h>
+using namespace std;
+using namespace log4cplus;
+Logger myfiles_logger;
 
+// 假设数据库或者用户管理类来验证用户
 int authenticateUser1(int search,const char* username,int *num,char *cmd) {
 	MYSQL *conn=mysql_init(NULL);
 	if(conn==NULL){
 		return -1;
 	}
-	if(mysql_real_connect(conn,"192.168.182.26","virtual","1","cloud_disk",0,NULL,0)==NULL){
+	LOG4CPLUS_DEBUG(myfiles_logger,"search file #plan to connect");
+	if(mysql_real_connect(conn," 192.168.250.26","virtual","1","cloud_disk",0,NULL,0)==NULL){
 		mysql_close(conn);
 		return -1;
 	}
+	LOG4CPLUS_DEBUG(myfiles_logger,"search file #connected");
 	// 这里应该有代码来检查用户的凭据，例如查询数据库
 	char query[BUFSIZ];
 	if(search==1){
@@ -32,16 +41,19 @@ int authenticateUser1(int search,const char* username,int *num,char *cmd) {
 	else{
 		sprintf(query,"SELECT count FROM user_file_count WHERE user = '%s';",username);
 	}
+	LOG4CPLUS_DEBUG(myfiles_logger,"search file #searched");
 	if(mysql_query(conn,query)){
 		mysql_close(conn);
 		return -1;
 	}
+	LOG4CPLUS_DEBUG(myfiles_logger,"search file #res1 true");
 	// 如果凭据正确，返回true，否则返回false
 	MYSQL_RES *result=mysql_store_result(conn);
 	if(result==NULL){
 		mysql_close(conn);
 		return -1;
 	}
+	LOG4CPLUS_DEBUG(myfiles_logger,"search file #res2 true");
 	MYSQL_ROW row;
 	while ((row = mysql_fetch_row(result)) != NULL) {
 		*num=atoi(row[0]);
@@ -61,14 +73,17 @@ int strcmd(const char *cmd){
 }
 
 int authenticateUser2(char* cmd,const char* username,int start,int count) {
+	LOG4CPLUS_DEBUG(myfiles_logger,"search file2 #plan to init");
 	MYSQL *conn=mysql_init(NULL);
 	if(conn==NULL){
 		return -1;
 	}
-	if(mysql_real_connect(conn,"192.168.182.26","virtual","1","cloud_disk",0,NULL,0)==NULL){
+	LOG4CPLUS_DEBUG(myfiles_logger,"search file #plan to connect");
+	if(mysql_real_connect(conn," 192.168.250.26","virtual","1","cloud_disk",0,NULL,0)==NULL){
 		mysql_close(conn);
 		return -1;
 	}
+	LOG4CPLUS_DEBUG(myfiles_logger,"search file #connected");
 	char *index=strtok(cmd,"=");
 	index=strtok(NULL,"=");
 	char *str=strtok(NULL,"");
@@ -88,17 +103,19 @@ int authenticateUser2(char* cmd,const char* username,int start,int count) {
 		}
 	}
 
+	LOG4CPLUS_DEBUG(myfiles_logger,"search file #searched");
 	if(mysql_query(conn,query)){
 		mysql_close(conn);
 		return -1;
 	}
 	// 如果凭据正确，返回true，否则返回false
-
+	LOG4CPLUS_DEBUG(myfiles_logger,"search file #serach true");
 	MYSQL_RES *result=mysql_store_result(conn);
 	if(result==NULL){
 		mysql_close(conn);
 		return -1;
 	}
+	LOG4CPLUS_DEBUG(myfiles_logger,"search file #read");
 	int num_fields=mysql_num_fields(result);
 	int num_rows=mysql_num_rows(result);
 	if(num_rows>0){
@@ -132,18 +149,35 @@ int authenticateUser2(char* cmd,const char* username,int start,int count) {
 		printf("%s",charArray);
 		delete [] charArray;
 	}
+	LOG4CPLUS_DEBUG(myfiles_logger,"search file #over");
 	mysql_free_result(result);
 	mysql_close(conn);
 	return 0;
 }
-bool validateToken(const std::string& token) {  
-	// 在这里实现你的 token 验证逻辑  
-	// 例如，从数据库或缓存中查找 token 是否有效，并与 userId 匹配  
-	// ...  
-	return true; // 示例：总是返回 true，实际实现中需要替换  
-}  
+bool validateToken(const std::string& token,string& username) {
+	//token从redis中取出
+	return get_redis(string& username,string& token); 
+}
 
 int main() {
+	//日志初始化
+	log4cplus::Initializer initializer;
+
+	/* step 1: Instantiate an appender object */
+	SharedAppenderPtr  _append(new RollingFileAppender("myfiles.log", 300 * 1024, 5));
+	_append->setName("myfiles_appender");
+
+	/* step 2: Instantiate a layout object */
+	/* step 3: Attach the layout object to the appender */
+	std::string pattern = "%D{%m/%d/%y %H:%M:%S,%q} [%-5t] [%-5p] - %m%n";
+	_append->setLayout(std::unique_ptr<Layout>(new PatternLayout(pattern)));
+
+	/* step 4: Instantiate a logger object */
+	myfiles_logger = Logger::getInstance("myfiles_logger");
+
+	/* step 5: Attach the appender object to the logger  */
+	myfiles_logger.addAppender(_append);
+
 	while (FCGI_Accept() >= 0) {
 		// 1. 根据content-length得到post数据块的长度
 		char* contentLengthStr = getenv( "CONTENT_LENGTH");
@@ -177,7 +211,7 @@ int main() {
 
 		const char* username = root["user"].asCString();
 		const char* token = root["token"].asCString();
-		if(!validateToken(token)){
+		if(!validateToken(token,username)){
 			printf( "Content-type: application/json\r\n\r\n");
 			printf("{\"code\":\"111\"}");
 			free(content);

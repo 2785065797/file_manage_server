@@ -17,6 +17,7 @@
 #include <log4cplus/helpers/property.h>
 #include <iomanip>
 #include<memory>
+#include<token.h>
 using namespace std;
 using namespace log4cplus;
 
@@ -129,7 +130,7 @@ int authenticateUser(const char* username,const char* md5,const char* filename,c
 	if(conn==NULL){
 		return -1;
 	}
-	if(mysql_real_connect(conn,"192.168.182.26","virtual","1","cloud_disk",0,NULL,0)==NULL){
+	if(mysql_real_connect(conn," 192.168.250.26","virtual","1","cloud_disk",0,NULL,0)==NULL){
 		mysql_close(conn);
 		return -1;
 	}

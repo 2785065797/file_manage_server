@@ -8,41 +8,38 @@ using namespace std;
 #include<mysql.h>
 #include<fastcgi.h>
 #include <json.h>
+#include<token.h>
 #include<string>
 // 假设您有一个数据库或者用户管理类来验证用户
 int authenticateUser(const char* username, const char* password) {
-	MYSQL *conn=mysql_init(NULL);
-	if(conn==NULL){
-		return -1;
-	}
-	if(mysql_real_connect(conn,"192.168.182.26","virtual","1","cloud_disk",0,NULL,0)==NULL){
-		mysql_close(conn);
-		return -1;
-	}
-	// 这里应该有代码来检查用户的凭据，例如查询数据库
-	char query[BUFSIZ];
-	sprintf(query,"select * from user where name= '%s' and password= '%s'",username,password);
-	if(mysql_query(conn,query)){
-		mysql_close(conn);
-		return -1;
-	}
 
-	// 如果凭据正确，返回true，否则返回false
-	MYSQL_RES *result=mysql_store_result(conn);
-	if(result==NULL){
-		mysql_close(conn);
-		return -1;
+	MprpcApplication::Init();
+	
+    fixbug::UserServiceRpc_Stub stub(new MprpcChannel());
+    //这一步操作后面会讲，这里就当是实例化UserServiceRpc_Stub对象吧。UserServiceRpc_Stub是由user.proto生成的类，我们之前在user.proto中注册了Login方法，
+    
+    fixbug::LoginRequest request;
+    request.set_name(username);
+    request.set_pwd(password);
+    
+    fixbug::LoginResponse response;
+    // callee的Login函数返回LoginResponse数据结构数据
+    
+    stub.Login(nullptr, &request, &response, nullptr); 
+    //caller发起远端调用，将Login的参数request发过去，callee返回的结果放在response中。
+	if (0 == response.result().errcode()){
+		return 1;
 	}
-	if(mysql_num_rows(result)>0){
-		mysql_close(conn);
-		return 1; // 为了示例，这里总是返回true
-	}
-	else {	
-		mysql_close(conn);
+	else{
 		return -1;
 	}
 }
-
+string Token(string& username,int length) {
+	//密钥生成器
+	std::string key= generateRandomString(length);
+	//创建token
+	return createToken(string& username,key);
+}
 int main() {
 	while (FCGI_Accept() >= 0) {
 		// 1. 根据content-length得到post数据块的长度
@@ -77,7 +74,8 @@ int main() {
 		const char* password = root["pwd"].asCString();
 		printf( "Content-type: application/json\r\n\r\n");
 		if(authenticateUser(username,password)==1){
-			printf("{\"code\":\"000\"}");
+			string token=Token(username,18);
+			printf("{\"code\":\"000\",\"token\":\"%s\"}\n", token.c_str());
 		}
 		else{
 			printf("{\"code\":\"001\"}");

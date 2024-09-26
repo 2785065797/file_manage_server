@@ -2,7 +2,6 @@
 using namespace std;
 #include <fcntl.h>
 #include <unistd.h>
-
 #include <string.h>
 #include "fcgi_stdio.h"
 #include"fcgi_config.h"
@@ -10,6 +9,7 @@ using namespace std;
 #include<fastcgi.h>
 #include <json.h>
 #include<string>
+#include<token.h>
 #include<regex.h>
 // 假设您有一个数据库或者用户管理类来验证用户
 
@@ -18,7 +18,7 @@ int authenticateUser1(int search,long *num,char *cmd) {
 	if(conn==NULL){
 		return -1;
 	}
-	if(mysql_real_connect(conn,"192.168.182.26","virtual","1","cloud_disk",0,NULL,0)==NULL){
+	if(mysql_real_connect(conn," 192.168.250.26","virtual","1","cloud_disk",0,NULL,0)==NULL){
 		mysql_close(conn);
 		return -1;
 	}
@@ -62,7 +62,7 @@ int authenticateUser2(char* cmd,int start,int count) {
 	if(conn==NULL){
 		return -1;
 	}
-	if(mysql_real_connect(conn,"192.168.182.26","virtual","1","cloud_disk",0,NULL,0)==NULL){
+	if(mysql_real_connect(conn," 192.168.250.26","virtual","1","cloud_disk",0,NULL,0)==NULL){
 		mysql_close(conn);
 		return -1;
 	}

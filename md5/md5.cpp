@@ -9,6 +9,7 @@ using namespace std;
 #include<fastcgi.h>
 #include <json.h>
 #include<string>
+#include<token.h>
 int check_file_exists(MYSQL *conn, const char *file_name,const char *md5) {
 	// 构建查询语句
 	char query[1024];
@@ -99,7 +100,7 @@ int authenticateUser(const char* username, const char* md5,const char* fileName)
 	if(conn==NULL){
 		return -1;
 	}
-	if(mysql_real_connect(conn,"192.168.182.26","virtual","1","cloud_disk",0,NULL,0)==NULL){
+	if(mysql_real_connect(conn," 192.168.250.26","virtual","1","cloud_disk",0,NULL,0)==NULL){
 		mysql_close(conn);
 		return -1;
 	}
@@ -116,12 +117,10 @@ int authenticateUser(const char* username, const char* md5,const char* fileName)
 	return flag;
 }
 
-bool validateToken(const std::string& token) {  
-	// 在这里实现你的 token 验证逻辑  
-	// 例如，从数据库或缓存中查找 token 是否有效，并与 userId 匹配  
-	// ... 
-	return true; // 示例：总是返回 true，实际实现中需要替换  
-}  
+bool validateToken(const std::string& token,string& username) {
+	//token从redis中取出
+	return get_redis(string& username,string& token); 
+}
 
 int main() {
 	while (FCGI_Accept() >= 0) {
@@ -158,7 +157,7 @@ int main() {
 		const char* md5=root["md5"].asCString();
 		const char* fileName=root["fileName"].asCString();
 		// ... 其他字段
-		if(!validateToken(token)){
+		if(!validateToken(token,username)){
 			printf( "Content-type: application/json\r\n\r\n");
 			printf("{\"code\":\"111\"}");
 			free(content);

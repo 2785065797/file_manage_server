@@ -1,17 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
-//#include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fdfs_client.h>
 #include <sys/wait.h>
-//#include<iostredam>
 #include "fcgi_stdio.h"
 #include <fcntl.h>
 #include <mysql.h>
 #include <mysqld_error.h>
 #include <unistd.h>
-//#include <sw/redis++/redis++.h>
+#include<token.h>
 #include <hiredis/hiredis.h>
 #include<string.h>
 
@@ -232,7 +230,7 @@ int authenticateUser(const char* user,const char* fileName,const char* md5,long 
 		//printf("{\"code1\":\"001\"}");
 		return -1;
 	}
-	if(mysql_real_connect(conn,"192.168.182.26","virtual","1","cloud_disk",0,NULL,0)==NULL){
+	if(mysql_real_connect(conn," 192.168.250.26","virtual","1","cloud_disk",0,NULL,0)==NULL){
 		mysql_close(conn);
 		return -1;
 	}
